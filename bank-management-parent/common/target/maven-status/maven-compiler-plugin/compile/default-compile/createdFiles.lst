@@ -1,0 +1,7 @@
+com\example\common\model\ConversationRecord.class
+com\example\common\config\SQLiteDialect.class
+com\example\common\client\ServiceClient.class
+com\example\common\config\RestClientConfig.class
+com\example\common\model\Customer.class
+com\example\common\config\DatabaseConfig.class
+com\example\common\config\SQLiteIdentityColumnSupport.class
