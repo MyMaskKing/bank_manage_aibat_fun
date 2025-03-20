@@ -1,7 +1,6 @@
 package com.example.chat.controller;
 
 import com.example.chat.service.ChatService;
-import com.example.common.model.ChatResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -25,9 +24,9 @@ public class ChatController {
         log.info("收到用户输入: {}", userInput);
         
         try {
-            ChatResponse response = chatService.processUserInput(userInput);
+            String response = chatService.processUserInputAsString(userInput);
             Map<String, String> result = new HashMap<>();
-            result.put("response", response.getContent());
+            result.put("response", response);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("处理用户输入时发生错误", e);

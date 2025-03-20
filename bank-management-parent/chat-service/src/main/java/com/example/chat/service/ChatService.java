@@ -59,6 +59,30 @@ public class ChatService {
     }
     
     /**
+     * 处理用户输入并返回字符串结果
+     */
+    public String processUserInputAsString(String userInput) {
+        try {
+            // 1. 分析用户意图
+            String apiName = serviceClient.analyzeIntent(userInput);
+            log.info("分析用户意图: {} -> {}", userInput, apiName);
+            
+            // 2. 执行API
+            String result = serviceClient.executeApi(apiName, userInput);
+            log.info("API执行结果: {}", result);
+            
+            // 3. 保存对话记录
+            saveConversation(userInput, result);
+            
+            // 4. 返回结果
+            return result;
+        } catch (Exception e) {
+            log.error("处理用户输入时发生错误", e);
+            return "抱歉，处理您的请求时发生错误：" + e.getMessage();
+        }
+    }
+    
+    /**
      * 获取所有对话记录
      */
     public List<Map<String, String>> getAllConversations() {

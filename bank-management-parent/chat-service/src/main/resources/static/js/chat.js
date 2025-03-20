@@ -1,11 +1,15 @@
-// 发送用户输入到服务器
-function sendUserInput() {
+// 处理消息发送
+function sendMessage(event) {
+    event.preventDefault();
     const userInput = document.getElementById('userInput').value.trim();
-    if (userInput.length === 0) return;
+    if (userInput.length === 0) return false;
     
     // 显示用户消息
     addMessageToChat('user', userInput);
     document.getElementById('userInput').value = '';
+    
+    // 显示加载指示器
+    document.getElementById('loading').style.display = 'block';
     
     // 发送到服务器
     fetch('/api/chat', {
@@ -17,22 +21,36 @@ function sendUserInput() {
     })
     .then(response => response.json())
     .then(data => {
-        // 显示服务器响应
-        addMessageToChat('bot', data.response);
+        // 只显示响应内容
+        if (data && data.response) {
+            addMessageToChat('bot', data.response);
+        } else {
+            addMessageToChat('bot', '抱歉，收到了未预期的响应格式。');
+        }
     })
     .catch(error => {
         console.error('Error:', error);
         addMessageToChat('bot', '抱歉，发生了错误，请稍后再试。');
+    })
+    .finally(() => {
+        // 隐藏加载指示器
+        document.getElementById('loading').style.display = 'none';
     });
+    
+    return false;
 }
 
 // 添加消息到聊天窗口
 function addMessageToChat(sender, message) {
-    const chatContainer = document.getElementById('chatContainer');
+    const chatContainer = document.getElementById('chatMessages');
     const messageDiv = document.createElement('div');
-    messageDiv.classList.add('message', sender === 'user' ? 'user-message' : 'bot-message');
+    messageDiv.className = `message ${sender === 'user' ? 'user-message' : 'bot-message'}`;
     
-    messageDiv.innerText = message;
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+    contentDiv.innerText = message;
+    
+    messageDiv.appendChild(contentDiv);
     chatContainer.appendChild(messageDiv);
     
     // 自动滚动到底部
@@ -42,6 +60,7 @@ function addMessageToChat(sender, message) {
 // 添加快捷问题按钮
 function addQuickQuestionButtons() {
     const buttonContainer = document.getElementById('quickButtons');
+    buttonContainer.innerHTML = ''; // 清空现有按钮
     
     // 定义一些常用的问题
     const questions = [
@@ -54,10 +73,10 @@ function addQuickQuestionButtons() {
     questions.forEach(question => {
         const button = document.createElement('button');
         button.innerText = question;
-        button.classList.add('quick-button');
+        button.className = 'quick-button';
         button.onclick = function() {
             document.getElementById('userInput').value = question;
-            sendUserInput();
+            sendMessage(new Event('submit'));
         };
         buttonContainer.appendChild(button);
     });
@@ -65,13 +84,13 @@ function addQuickQuestionButtons() {
 
 // 下载对话记录
 function downloadChatHistory() {
-    const chatContainer = document.getElementById('chatContainer');
-    const messages = chatContainer.querySelectorAll('.message');
+    const chatContainer = document.getElementById('chatMessages');
+    const messages = chatContainer.querySelectorAll('.message-content');
     let content = '# 银行系统对话记录\n\n';
     content += `日期: ${new Date().toLocaleString()}\n\n`;
     
     messages.forEach(message => {
-        const isUser = message.classList.contains('user-message');
+        const isUser = message.parentElement.classList.contains('user-message');
         content += `${isUser ? '👤 用户' : '🤖 系统'}: ${message.innerText}\n\n`;
     });
     
@@ -94,7 +113,16 @@ function setupFileUpload() {
     uploadForm.addEventListener('submit', function(e) {
         e.preventDefault();
         
-        const formData = new FormData(uploadForm);
+        if (!fileInput.files || fileInput.files.length === 0) {
+            addMessageToChat('bot', '请先选择要上传的文件');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        
+        // 显示上传中消息
+        addMessageToChat('bot', '正在处理文件，请稍候...');
         
         fetch('/api/upload', {
             method: 'POST',
@@ -102,7 +130,7 @@ function setupFileUpload() {
         })
         .then(response => response.json())
         .then(data => {
-            addMessageToChat('bot', `文件上传结果: ${data.message}`);
+            addMessageToChat('bot', `文件处理结果: ${data.message}`);
         })
         .catch(error => {
             console.error('Error uploading file:', error);
@@ -113,13 +141,11 @@ function setupFileUpload() {
 
 // 页面加载完成后执行
 window.onload = function() {
-    // 添加发送按钮事件监听
-    document.getElementById('sendButton').addEventListener('click', sendUserInput);
-    
     // 添加回车键发送
     document.getElementById('userInput').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            sendUserInput();
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage(new Event('submit'));
         }
     });
     
@@ -131,7 +157,4 @@ window.onload = function() {
     
     // 设置文件上传
     setupFileUpload();
-    
-    // 欢迎消息
-    addMessageToChat('bot', '您好！我是银行智能助手，请问有什么可以帮您？');
 }; 
