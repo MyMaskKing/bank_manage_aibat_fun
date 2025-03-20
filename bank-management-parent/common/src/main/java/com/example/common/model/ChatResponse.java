@@ -8,5 +8,16 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ChatResponse {
-    private String response;
+    private String content;
+    private boolean success = true;
+    private String errorMessage;
+    
+    public ChatResponse(String content) {
+        this.content = content;
+    }
+    
+    public ChatResponse(boolean success, String errorMessage) {
+        this.success = success;
+        this.errorMessage = errorMessage;
+    }
 } 

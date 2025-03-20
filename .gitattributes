@@ -1,0 +1,35 @@
+# 设置默认行为，对所有文件进行标准化处理
+* text=auto
+
+# 声明文本文件，确保它们始终被正确规范化
+*.java text
+*.xml text
+*.yml text
+*.yaml text
+*.properties text
+*.md text
+*.html text
+*.css text
+*.js text
+*.json text
+*.sql text
+*.bat text eol=crlf
+*.sh text eol=lf
+LICENSE text
+
+# 声明二进制文件，确保它们不被修改
+*.db binary
+*.jar binary
+*.war binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.ico binary
+*.eot binary
+*.ttf binary
+*.woff binary
+*.woff2 binary 
