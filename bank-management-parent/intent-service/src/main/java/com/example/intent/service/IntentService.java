@@ -26,6 +26,9 @@ public class IntentService {
     // 意图实现状态
     private final Map<String, Boolean> intentImplementationStatus = new HashMap<>();
     
+    // 常见中文名字
+    private final String[] commonNames = {"张三", "李四", "王五", "赵六", "陈七", "刘八", "杨九", "周十"};
+    
     @PostConstruct
     public void init() {
         loadIntentPatternsFromFile();
@@ -125,6 +128,9 @@ public class IntentService {
             return "UNKNOWN";
         }
         
+        // 提取所有客户名
+        List<String> customerNames = extractCustomerNames(userInput);
+        
         for (Map.Entry<String, List<Pattern>> entry : intentPatterns.entrySet()) {
             String intent = entry.getKey();
             List<Pattern> patterns = entry.getValue();
@@ -140,11 +146,32 @@ public class IntentService {
                         apiName = "test_" + apiName;
                     }
                     
+                    // 如果找到多个客户名，将它们作为参数添加到API名称中
+                    if (customerNames.size() > 1) {
+                        apiName += "?customers=" + String.join(",", customerNames);
+                    }
+                    
                     return apiName;
                 }
             }
         }
         
         return "UNKNOWN";
+    }
+    
+    /**
+     * 从用户输入中提取客户名称列表
+     */
+    private List<String> extractCustomerNames(String userInput) {
+        List<String> names = new ArrayList<>();
+        
+        // 检查每个常见名字是否在输入中出现
+        for (String name : commonNames) {
+            if (userInput.contains(name)) {
+                names.add(name);
+            }
+        }
+        
+        return names;
     }
 } 

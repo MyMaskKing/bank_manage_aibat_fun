@@ -1,6 +1,7 @@
 package com.example.chat.controller;
 
 import com.example.chat.service.ChatService;
+import com.example.common.model.ChatResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -19,12 +20,22 @@ public class ChatController {
     private final ChatService chatService;
 
     @PostMapping("/api/chat")
-    public ResponseEntity<Map<String, String>> processUserInput(@RequestBody Map<String, String> request) {
-        String userInput = request.get("message");
-        log.info("收到用户输入: {}", userInput);
+    public ResponseEntity<Map<String, String>> processUserInput(
+            @RequestParam(value = "file", required = false) MultipartFile file,
+            @RequestParam(value = "message", required = false) String message) {
+        log.info("收到用户输入: {}, 文件: {}", message, file != null ? file.getOriginalFilename() : "无");
         
         try {
-            String response = chatService.processUserInputAsString(userInput);
+            String response;
+            if (file != null && !file.isEmpty()) {
+                // 如果有文件，使用文件处理逻辑
+                response = chatService.processUploadedFile(file, message);
+            } else {
+                // 如果没有文件，使用普通聊天处理逻辑
+                ChatResponse chatResponse = chatService.processUserInput(message);
+                response = chatResponse.getContent();
+            }
+            
             Map<String, String> result = new HashMap<>();
             result.put("response", response);
             return ResponseEntity.ok(result);
@@ -32,26 +43,6 @@ public class ChatController {
             log.error("处理用户输入时发生错误", e);
             Map<String, String> result = new HashMap<>();
             result.put("response", "抱歉，处理您的请求时发生错误：" + e.getMessage());
-            return ResponseEntity.ok(result);
-        }
-    }
-    
-    @PostMapping("/api/upload")
-    public ResponseEntity<Map<String, String>> handleFileUpload(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam("instruction") String instruction) {
-        log.info("收到文件上传: {}, 大小: {}, 指令: {}", file.getOriginalFilename(), file.getSize(), instruction);
-        
-        Map<String, String> result = new HashMap<>();
-        
-        try {
-            // 处理Excel或CSV文件
-            String processResult = chatService.processUploadedFile(file, instruction);
-            result.put("message", processResult);
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            log.error("处理上传文件时发生错误", e);
-            result.put("message", "文件处理失败: " + e.getMessage());
             return ResponseEntity.ok(result);
         }
     }

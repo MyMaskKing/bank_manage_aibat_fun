@@ -6,8 +6,8 @@ document.getElementById('fileUpload').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (file) {
         currentFile = file;
+        // 显示文件名
         document.getElementById('fileName').textContent = file.name;
-        addMessageToChat('bot', `已选择文件：${file.name}\n请告诉我您想要如何处理这个文件？`);
     }
 });
 
@@ -21,70 +21,38 @@ function sendMessage(event) {
     addMessageToChat('user', userInput);
     document.getElementById('userInput').value = '';
     
-    // 显示加载指示器
-    document.getElementById('loading').style.display = 'block';
+    // 构建请求数据
+    const formData = new FormData();
+    formData.append('message', userInput);
     
-    // 如果有文件且用户输入包含批处理相关关键词
-    if (currentFile && (
-        userInput.includes('批量') || 
-        userInput.includes('处理文件') || 
-        userInput.includes('处理这个') ||
-        userInput.includes('文件') ||
-        userInput.includes('csv') ||
-        userInput.includes('excel')
-    )) {
-        // 处理文件上传
-        const formData = new FormData();
+    // 如果有文件，添加到请求中
+    if (currentFile) {
         formData.append('file', currentFile);
-        formData.append('instruction', userInput);
-        
-        fetch('/api/upload', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            addMessageToChat('bot', data.message);
-            // 清除当前文件
-            currentFile = null;
-            document.getElementById('fileName').textContent = '';
-            document.getElementById('fileUpload').value = '';
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            addMessageToChat('bot', '文件处理失败，请稍后再试。');
-        })
-        .finally(() => {
-            document.getElementById('loading').style.display = 'none';
-        });
-    } else {
-        // 普通消息处理
-        fetch('/api/chat', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ 
-                message: userInput,
-                hasFile: currentFile !== null
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data && data.response) {
-                addMessageToChat('bot', data.response);
-            } else {
-                addMessageToChat('bot', '抱歉，收到了未预期的响应格式。');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            addMessageToChat('bot', '抱歉，发生了错误，请稍后再试。');
-        })
-        .finally(() => {
-            document.getElementById('loading').style.display = 'none';
-        });
     }
+    
+    // 发送请求
+    fetch('/api/chat', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data && data.response) {
+            addMessageToChat('bot', data.response);
+            // 如果是文件处理请求，清除文件状态
+            if (currentFile) {
+                currentFile = null;
+                document.getElementById('fileUpload').value = '';
+                document.getElementById('fileName').textContent = '';
+            }
+        } else {
+            addMessageToChat('bot', '抱歉，收到了未预期的响应格式。');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        addMessageToChat('bot', '抱歉，发生了错误，请稍后再试。');
+    });
     
     return false;
 }
@@ -93,7 +61,10 @@ function sendMessage(event) {
 function addMessageToChat(sender, message) {
     const chatContainer = document.getElementById('chatMessages');
     const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${sender === 'user' ? 'user-message' : 'bot-message'}`;
+    messageDiv.className = `message ${
+        sender === 'user' ? 'user-message' : 
+        sender === 'system' ? 'system-message' : 'bot-message'
+    }`;
     
     const contentDiv = document.createElement('div');
     contentDiv.className = 'message-content';

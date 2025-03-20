@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -43,19 +42,73 @@ public class ChatService {
             String apiName = serviceClient.analyzeIntent(userInput);
             log.info("分析用户意图: {} -> {}", userInput, apiName);
             
-            // 2. 执行API
+            // 2. 检查是否需要批量处理
+            log.info("检查是否需要批量处理，apiName: {}", apiName);
+            log.info("是否包含?customers=: {}", apiName.contains("?customers="));
+            
+            if (apiName.contains("?customers=")) {
+                log.info("进入批量处理逻辑");
+                String[] parts = apiName.split("\\?customers=");
+                String baseApiName = parts[0];  // 获取基础API名称
+                String[] customerNames = parts[1].split(",");
+                log.info("基础API名称: {}, 客户名称列表: {}", baseApiName, String.join(",", customerNames));
+                
+                // 收集每个客户的查询结果
+                List<String> results = new ArrayList<>();
+                String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                
+                // 为每个客户分别调用API
+                for (String customerName : customerNames) {
+                    log.info("处理客户: {}", customerName);
+                    // 调用API，使用baseApiName而不是带参数的apiName
+                    String result = serviceClient.executeApi(baseApiName, customerName);
+                    results.add(result);
+                }
+                
+                // 合并结果
+                String mergedResult = mergeResults(results, timestamp);
+                log.info("合并后的结果: {}", mergedResult);
+                
+                // 保存对话记录
+                saveConversation(userInput, mergedResult);
+                
+                return new ChatResponse(mergedResult);
+            } else {
+                log.info("进入单个处理逻辑");
+            }
+            
+            // 3. 单个处理
             String result = serviceClient.executeApi(apiName, userInput);
             log.info("API执行结果: {}", result);
             
-            // 3. 保存对话记录
+            // 4. 保存对话记录
             saveConversation(userInput, result);
             
-            // 4. 返回结果
             return new ChatResponse(result);
         } catch (Exception e) {
             log.error("处理用户输入时发生错误", e);
             return new ChatResponse("抱歉，处理您的请求时发生错误：" + e.getMessage());
         }
+    }
+    
+    /**
+     * 合并多个结果
+     */
+    private String mergeResults(List<String> results, String timestamp) {
+        StringBuilder merged = new StringBuilder();
+        merged.append("批量查询结果（").append(timestamp).append("）：\n\n");
+        
+        for (int i = 0; i < results.size(); i++) {
+            if (i > 0) {
+                merged.append("\n----------------------------------------\n\n");
+            }
+            // 移除每个结果中的时间戳（如果有）
+            String result = results.get(i);
+            result = result.replaceAll("（\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}）", "");
+            merged.append(result);
+        }
+        
+        return merged.toString();
     }
     
     /**
@@ -161,27 +214,46 @@ public class ChatService {
             throw new IllegalArgumentException("仅支持CSV或Excel文件");
         }
         
-        if (filename.endsWith(".csv")) {
-            return processCSVFile(file, userInstruction);
-        } else {
-            return "Excel文件处理功能正在开发中，请使用CSV格式";
+        // 创建临时文件
+        java.nio.file.Path tempFile = java.nio.file.Files.createTempFile("upload_", filename);
+        try {
+            // 保存上传的文件到临时文件
+            file.transferTo(tempFile.toFile());
+            
+            String result;
+            if (filename.endsWith(".csv")) {
+                result = processCSVFile(tempFile, userInstruction);
+            } else {
+                result = "Excel文件处理功能正在开发中，请使用CSV格式";
+            }
+            
+            return result;
+        } finally {
+            // 清理临时文件
+            try {
+                java.nio.file.Files.deleteIfExists(tempFile);
+                log.info("临时文件已删除: {}", tempFile);
+            } catch (Exception e) {
+                log.warn("清理临时文件失败: {}", e.getMessage());
+            }
         }
     }
     
     /**
      * 处理CSV文件
      */
-    private String processCSVFile(MultipartFile file, String userInstruction) throws Exception {
+    private String processCSVFile(java.nio.file.Path filePath, String userInstruction) throws Exception {
         List<Map<String, String>> results = new ArrayList<>();
         AtomicInteger successCount = new AtomicInteger(0);
         AtomicInteger errorCount = new AtomicInteger(0);
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
-            CSVParser csvParser = new CSVParser(reader, CSVFormat.DEFAULT.withFirstRecordAsHeader());
+        try (BufferedReader reader = java.nio.file.Files.newBufferedReader(filePath, StandardCharsets.UTF_8)) {
+            CSVParser csvParser = CSVParser.parse(reader, CSVFormat.DEFAULT.builder().setHeader().build());
             List<CSVRecord> records = csvParser.getRecords();
             
             // 分析用户指令的意图
-            String baseApiName = serviceClient.analyzeIntent(userInstruction);
+            final String baseApiName = serviceClient.analyzeIntent(userInstruction);
             
             // 为每条记录创建一个异步任务
             List<CompletableFuture<Map<String, String>>> futures = new ArrayList<>();
@@ -190,25 +262,22 @@ public class ChatService {
                 CompletableFuture<Map<String, String>> future = CompletableFuture.supplyAsync(() -> {
                     Map<String, String> result = new HashMap<>();
                     try {
-                        // 获取客户名称
                         String customerName = record.get("客户名称");
                         if (customerName == null || customerName.trim().isEmpty()) {
                             throw new IllegalArgumentException("客户名称不能为空");
                         }
                         
-                        // 根据用户指令和客户名称构建具体的操作指令
-                        String specificInstruction = userInstruction.replace("用户", customerName)
-                                                                 .replace("客户", customerName);
+                        // 构建查询指令
+                        String queryInstruction = "查询" + customerName + "的OTP状态";
                         
-                        // 执行API
-                        String apiResult = serviceClient.executeApi(baseApiName, specificInstruction);
+                        // 执行API调用
+                        String apiResult = serviceClient.executeApi(baseApiName, queryInstruction);
                         
                         // 保存记录
-                        saveConversation(specificInstruction, apiResult);
+                        saveConversation(queryInstruction, apiResult);
                         
                         result.put("status", "成功");
                         result.put("customerName", customerName);
-                        result.put("instruction", specificInstruction);
                         result.put("result", apiResult);
                         
                         successCount.incrementAndGet();
@@ -235,16 +304,23 @@ public class ChatService {
             }
         }
         
+        // 构建返回消息
         StringBuilder resultMessage = new StringBuilder();
-        resultMessage.append(String.format("批量处理完成。总计: %d, 成功: %d, 失败: %d\n", 
-            successCount.get() + errorCount.get(), successCount.get(), errorCount.get()));
+        resultMessage.append("批量查询结果（").append(timestamp).append("）：\n\n");
+        
+        // 添加成功的结果
+        results.stream()
+              .filter(r -> "成功".equals(r.get("status")))
+              .forEach(r -> {
+                  resultMessage.append(r.get("result")).append("\n\n");
+              });
         
         // 添加失败的详细信息
         if (errorCount.get() > 0) {
-            resultMessage.append("\n失败详情：\n");
+            resultMessage.append("处理失败的客户：\n");
             results.stream()
                   .filter(r -> "失败".equals(r.get("status")))
-                  .forEach(r -> resultMessage.append(String.format("客户 %s: %s\n", 
+                  .forEach(r -> resultMessage.append(String.format("- %s: %s\n", 
                       r.get("customerName"), r.get("error"))));
         }
         
