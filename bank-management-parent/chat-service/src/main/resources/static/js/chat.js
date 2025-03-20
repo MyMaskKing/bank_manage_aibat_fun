@@ -1,3 +1,16 @@
+// 全局变量存储当前选择的文件
+let currentFile = null;
+
+// 处理文件选择
+document.getElementById('fileUpload').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        currentFile = file;
+        document.getElementById('fileName').textContent = file.name;
+        addMessageToChat('bot', `已选择文件：${file.name}\n请告诉我您想要如何处理这个文件？`);
+    }
+});
+
 // 处理消息发送
 function sendMessage(event) {
     event.preventDefault();
@@ -11,31 +24,67 @@ function sendMessage(event) {
     // 显示加载指示器
     document.getElementById('loading').style.display = 'block';
     
-    // 发送到服务器
-    fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ message: userInput })
-    })
-    .then(response => response.json())
-    .then(data => {
-        // 只显示响应内容
-        if (data && data.response) {
-            addMessageToChat('bot', data.response);
-        } else {
-            addMessageToChat('bot', '抱歉，收到了未预期的响应格式。');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        addMessageToChat('bot', '抱歉，发生了错误，请稍后再试。');
-    })
-    .finally(() => {
-        // 隐藏加载指示器
-        document.getElementById('loading').style.display = 'none';
-    });
+    // 如果有文件且用户输入包含批处理相关关键词
+    if (currentFile && (
+        userInput.includes('批量') || 
+        userInput.includes('处理文件') || 
+        userInput.includes('处理这个') ||
+        userInput.includes('文件') ||
+        userInput.includes('csv') ||
+        userInput.includes('excel')
+    )) {
+        // 处理文件上传
+        const formData = new FormData();
+        formData.append('file', currentFile);
+        formData.append('instruction', userInput);
+        
+        fetch('/api/upload', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            addMessageToChat('bot', data.message);
+            // 清除当前文件
+            currentFile = null;
+            document.getElementById('fileName').textContent = '';
+            document.getElementById('fileUpload').value = '';
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            addMessageToChat('bot', '文件处理失败，请稍后再试。');
+        })
+        .finally(() => {
+            document.getElementById('loading').style.display = 'none';
+        });
+    } else {
+        // 普通消息处理
+        fetch('/api/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ 
+                message: userInput,
+                hasFile: currentFile !== null
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data && data.response) {
+                addMessageToChat('bot', data.response);
+            } else {
+                addMessageToChat('bot', '抱歉，收到了未预期的响应格式。');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            addMessageToChat('bot', '抱歉，发生了错误，请稍后再试。');
+        })
+        .finally(() => {
+            document.getElementById('loading').style.display = 'none';
+        });
+    }
     
     return false;
 }
@@ -105,40 +154,6 @@ function downloadChatHistory() {
     document.body.removeChild(element);
 }
 
-// 添加文件上传功能
-function setupFileUpload() {
-    const fileInput = document.getElementById('fileUpload');
-    const uploadForm = document.getElementById('uploadForm');
-    
-    uploadForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        if (!fileInput.files || fileInput.files.length === 0) {
-            addMessageToChat('bot', '请先选择要上传的文件');
-            return;
-        }
-        
-        const formData = new FormData();
-        formData.append('file', fileInput.files[0]);
-        
-        // 显示上传中消息
-        addMessageToChat('bot', '正在处理文件，请稍候...');
-        
-        fetch('/api/upload', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            addMessageToChat('bot', `文件处理结果: ${data.message}`);
-        })
-        .catch(error => {
-            console.error('Error uploading file:', error);
-            addMessageToChat('bot', '文件上传失败，请稍后再试。');
-        });
-    });
-}
-
 // 页面加载完成后执行
 window.onload = function() {
     // 添加回车键发送
@@ -154,7 +169,4 @@ window.onload = function() {
     
     // 添加快捷问题按钮
     addQuickQuestionButtons();
-    
-    // 设置文件上传
-    setupFileUpload();
 }; 

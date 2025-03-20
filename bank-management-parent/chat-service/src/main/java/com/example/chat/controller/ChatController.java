@@ -37,14 +37,16 @@ public class ChatController {
     }
     
     @PostMapping("/api/upload")
-    public ResponseEntity<Map<String, String>> handleFileUpload(@RequestParam("file") MultipartFile file) {
-        log.info("收到文件上传: {}, 大小: {}", file.getOriginalFilename(), file.getSize());
+    public ResponseEntity<Map<String, String>> handleFileUpload(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("instruction") String instruction) {
+        log.info("收到文件上传: {}, 大小: {}, 指令: {}", file.getOriginalFilename(), file.getSize(), instruction);
         
         Map<String, String> result = new HashMap<>();
         
         try {
             // 处理Excel或CSV文件
-            String processResult = chatService.processUploadedFile(file);
+            String processResult = chatService.processUploadedFile(file, instruction);
             result.put("message", processResult);
             return ResponseEntity.ok(result);
         } catch (Exception e) {

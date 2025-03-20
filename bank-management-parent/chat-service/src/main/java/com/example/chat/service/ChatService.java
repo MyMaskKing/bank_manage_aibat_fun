@@ -155,14 +155,14 @@ public class ChatService {
     /**
      * 处理上传的批量文件
      */
-    public String processUploadedFile(MultipartFile file) throws Exception {
+    public String processUploadedFile(MultipartFile file, String userInstruction) throws Exception {
         String filename = file.getOriginalFilename();
         if (filename == null || (!filename.endsWith(".csv") && !filename.endsWith(".xlsx"))) {
             throw new IllegalArgumentException("仅支持CSV或Excel文件");
         }
         
         if (filename.endsWith(".csv")) {
-            return processCSVFile(file);
+            return processCSVFile(file, userInstruction);
         } else {
             return "Excel文件处理功能正在开发中，请使用CSV格式";
         }
@@ -171,7 +171,7 @@ public class ChatService {
     /**
      * 处理CSV文件
      */
-    private String processCSVFile(MultipartFile file) throws Exception {
+    private String processCSVFile(MultipartFile file, String userInstruction) throws Exception {
         List<Map<String, String>> results = new ArrayList<>();
         AtomicInteger successCount = new AtomicInteger(0);
         AtomicInteger errorCount = new AtomicInteger(0);
@@ -180,6 +180,9 @@ public class ChatService {
             CSVParser csvParser = new CSVParser(reader, CSVFormat.DEFAULT.withFirstRecordAsHeader());
             List<CSVRecord> records = csvParser.getRecords();
             
+            // 分析用户指令的意图
+            String baseApiName = serviceClient.analyzeIntent(userInstruction);
+            
             // 为每条记录创建一个异步任务
             List<CompletableFuture<Map<String, String>>> futures = new ArrayList<>();
             
@@ -187,34 +190,25 @@ public class ChatService {
                 CompletableFuture<Map<String, String>> future = CompletableFuture.supplyAsync(() -> {
                     Map<String, String> result = new HashMap<>();
                     try {
-                        // 检查必要的字段
-                        String operation = record.get("操作");
+                        // 获取客户名称
                         String customerName = record.get("客户名称");
-                        
-                        // 根据操作类型构建用户输入
-                        String userInput;
-                        if ("查询客户".equals(operation)) {
-                            userInput = "查询" + customerName + "的客户信息";
-                        } else if ("查询OTP".equals(operation)) {
-                            userInput = "查看" + customerName + "的OTP状态";
-                        } else if ("开启OTP".equals(operation)) {
-                            userInput = "更新" + customerName + "的OTP为开启";
-                        } else if ("关闭OTP".equals(operation)) {
-                            userInput = "更新" + customerName + "的OTP为关闭";
-                        } else {
-                            throw new IllegalArgumentException("不支持的操作类型: " + operation);
+                        if (customerName == null || customerName.trim().isEmpty()) {
+                            throw new IllegalArgumentException("客户名称不能为空");
                         }
                         
-                        // 模拟处理流程
-                        String apiName = serviceClient.analyzeIntent(userInput);
-                        String apiResult = serviceClient.executeApi(apiName, userInput);
+                        // 根据用户指令和客户名称构建具体的操作指令
+                        String specificInstruction = userInstruction.replace("用户", customerName)
+                                                                 .replace("客户", customerName);
+                        
+                        // 执行API
+                        String apiResult = serviceClient.executeApi(baseApiName, specificInstruction);
                         
                         // 保存记录
-                        saveConversation(userInput, apiResult);
+                        saveConversation(specificInstruction, apiResult);
                         
                         result.put("status", "成功");
                         result.put("customerName", customerName);
-                        result.put("operation", operation);
+                        result.put("instruction", specificInstruction);
                         result.put("result", apiResult);
                         
                         successCount.incrementAndGet();
@@ -222,7 +216,6 @@ public class ChatService {
                         log.error("处理CSV记录失败", e);
                         result.put("status", "失败");
                         result.put("customerName", record.get("客户名称"));
-                        result.put("operation", record.get("操作"));
                         result.put("error", e.getMessage());
                         
                         errorCount.incrementAndGet();
@@ -242,7 +235,19 @@ public class ChatService {
             }
         }
         
-        return String.format("批量处理完成。总计: %d, 成功: %d, 失败: %d", 
-            successCount.get() + errorCount.get(), successCount.get(), errorCount.get());
+        StringBuilder resultMessage = new StringBuilder();
+        resultMessage.append(String.format("批量处理完成。总计: %d, 成功: %d, 失败: %d\n", 
+            successCount.get() + errorCount.get(), successCount.get(), errorCount.get()));
+        
+        // 添加失败的详细信息
+        if (errorCount.get() > 0) {
+            resultMessage.append("\n失败详情：\n");
+            results.stream()
+                  .filter(r -> "失败".equals(r.get("status")))
+                  .forEach(r -> resultMessage.append(String.format("客户 %s: %s\n", 
+                      r.get("customerName"), r.get("error"))));
+        }
+        
+        return resultMessage.toString();
     }
 } 
