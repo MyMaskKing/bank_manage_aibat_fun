@@ -12,6 +12,7 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -65,6 +66,50 @@ public class ServiceClient {
         } catch (ResourceAccessException e) {
             log.error("意图分析服务不可用: {}", e.getMessage());
             return "queryCustomerInfo"; // 提供模拟响应以便进行测试
+        } catch (Exception e) {
+            log.error("意图分析服务调用失败", e);
+            throw new RuntimeException("意图分析服务调用失败: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 获取完整的意图分析结果，包括API名称、调用次数和参数
+     */
+    public Map<String, Object> getIntentDetails(String userInput) {
+        String url = intentServiceUrl + "/intent/analyze";
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        
+        HttpEntity<Map<String, String>> request = new HttpEntity<>(
+            Map.of("userInput", userInput),
+            headers
+        );
+
+        try {
+            log.info("调用意图详情分析服务: {}", url);
+            Map<String, Object> result = restTemplate.postForObject(url, request, Map.class);
+            log.info("意图详情分析结果: {}", result);
+            
+            if (result != null) {
+                return result;
+            }
+            
+            // 如果没有返回结果，提供默认值
+            Map<String, Object> defaultResult = Map.of(
+                "apiName", "unknown",
+                "callCount", 1,
+                "params", List.of()
+            );
+            return defaultResult;
+            
+        } catch (ResourceAccessException e) {
+            log.error("意图分析服务不可用: {}", e.getMessage());
+            // 提供模拟响应以便进行测试
+            return Map.of(
+                "apiName", "queryCustomerInfo",
+                "callCount", 1,
+                "params", List.of("张三")
+            );
         } catch (Exception e) {
             log.error("意图分析服务调用失败", e);
             throw new RuntimeException("意图分析服务调用失败: " + e.getMessage(), e);

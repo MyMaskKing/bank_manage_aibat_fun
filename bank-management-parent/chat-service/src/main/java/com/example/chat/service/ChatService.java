@@ -38,30 +38,36 @@ public class ChatService {
 
     public ChatResponse processUserInput(String userInput) {
         try {
-            // 1. 分析用户意图
-            String apiName = serviceClient.analyzeIntent(userInput);
-            log.info("分析用户意图: {} -> {}", userInput, apiName);
+            // 1. 获取完整的意图分析结果
+            Map<String, Object> intentDetails = serviceClient.getIntentDetails(userInput);
+            log.info("分析用户意图详情: {} -> {}", userInput, intentDetails);
+            
+            String apiName = (String) intentDetails.get("apiName");
+            int callCount = ((Number) intentDetails.get("callCount")).intValue();
+            List<String> params = (List<String>) intentDetails.get("params");
+            
+            // 提取基础API名称
+            String baseApiName = apiName;
             
             // 2. 检查是否需要批量处理
-            log.info("检查是否需要批量处理，apiName: {}", apiName);
-            log.info("是否包含?customers=: {}", apiName.contains("?customers="));
+            log.info("检查是否需要批量处理，callCount: {}, 参数数量: {}", callCount, params.size());
             
-            if (apiName.contains("?customers=")) {
+            if (callCount > 1 && !params.isEmpty()) {
                 log.info("进入批量处理逻辑");
-                String[] parts = apiName.split("\\?customers=");
-                String baseApiName = parts[0];  // 获取基础API名称
-                String[] customerNames = parts[1].split(",");
-                log.info("基础API名称: {}, 客户名称列表: {}", baseApiName, String.join(",", customerNames));
                 
                 // 收集每个客户的查询结果
                 List<String> results = new ArrayList<>();
                 String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
                 
-                // 为每个客户分别调用API
-                for (String customerName : customerNames) {
+                // 为每个客户名分别调用API
+                for (String customerName : params) {
                     log.info("处理客户: {}", customerName);
-                    // 调用API，使用baseApiName而不是带参数的apiName
-                    String result = serviceClient.executeApi(baseApiName, customerName);
+                    
+                    // 构建包含客户名的查询
+                    String customerQuery = userInput + " " + customerName;
+                    
+                    // 调用API
+                    String result = serviceClient.executeApi(baseApiName, customerQuery);
                     results.add(result);
                 }
                 
@@ -75,16 +81,16 @@ public class ChatService {
                 return new ChatResponse(mergedResult);
             } else {
                 log.info("进入单个处理逻辑");
+                
+                // 3. 单个处理
+                String result = serviceClient.executeApi(baseApiName, userInput);
+                log.info("API执行结果: {}", result);
+                
+                // 4. 保存对话记录
+                saveConversation(userInput, result);
+                
+                return new ChatResponse(result);
             }
-            
-            // 3. 单个处理
-            String result = serviceClient.executeApi(apiName, userInput);
-            log.info("API执行结果: {}", result);
-            
-            // 4. 保存对话记录
-            saveConversation(userInput, result);
-            
-            return new ChatResponse(result);
         } catch (Exception e) {
             log.error("处理用户输入时发生错误", e);
             return new ChatResponse("抱歉，处理您的请求时发生错误：" + e.getMessage());
@@ -116,9 +122,11 @@ public class ChatService {
      */
     public String processUserInputAsString(String userInput) {
         try {
-            // 1. 分析用户意图
-            String apiName = serviceClient.analyzeIntent(userInput);
-            log.info("分析用户意图: {} -> {}", userInput, apiName);
+            // 1. 获取完整的意图分析结果
+            Map<String, Object> intentDetails = serviceClient.getIntentDetails(userInput);
+            log.info("分析用户意图详情: {} -> {}", userInput, intentDetails);
+            
+            String apiName = (String) intentDetails.get("apiName");
             
             // 2. 执行API
             String result = serviceClient.executeApi(apiName, userInput);
@@ -147,7 +155,9 @@ public class ChatService {
      */
     public String analyzeIntent(String userInput) {
         try {
-            return serviceClient.analyzeIntent(userInput);
+            Map<String, Object> intentDetails = serviceClient.getIntentDetails(userInput);
+            String apiName = (String) intentDetails.get("apiName");
+            return apiName;
         } catch (Exception e) {
             log.error("分析用户意图失败", e);
             return "unknown";
@@ -253,7 +263,9 @@ public class ChatService {
             List<CSVRecord> records = csvParser.getRecords();
             
             // 分析用户指令的意图
-            final String baseApiName = serviceClient.analyzeIntent(userInstruction);
+            Map<String, Object> intentDetails = serviceClient.getIntentDetails(userInstruction);
+            String apiName = (String) intentDetails.get("apiName");
+            final String baseApiName = apiName;
             
             // 为每条记录创建一个异步任务
             List<CompletableFuture<Map<String, String>>> futures = new ArrayList<>();
@@ -267,14 +279,14 @@ public class ChatService {
                             throw new IllegalArgumentException("客户名称不能为空");
                         }
                         
-                        // 构建查询指令
-                        String queryInstruction = "查询" + customerName + "的OTP状态";
+                        // 构建包含客户名的查询
+                        String queryString = userInstruction + " " + customerName;
                         
-                        // 执行API调用
-                        String apiResult = serviceClient.executeApi(baseApiName, queryInstruction);
+                        // 执行API
+                        String apiResult = serviceClient.executeApi(baseApiName, queryString);
                         
                         // 保存记录
-                        saveConversation(queryInstruction, apiResult);
+                        saveConversation(queryString, apiResult);
                         
                         result.put("status", "成功");
                         result.put("customerName", customerName);

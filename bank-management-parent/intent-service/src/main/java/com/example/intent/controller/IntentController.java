@@ -15,12 +15,8 @@ public class IntentController {
     private IntentService intentService;
 
     @PostMapping("/analyze")
-    public Map<String, String> analyzeIntent(@RequestBody Map<String, String> request) {
+    public Map<String, Object> analyzeIntent(@RequestBody Map<String, String> request) {
         String userInput = request.get("userInput");
-        String apiName = intentService.analyzeIntent(userInput);
-        
-        Map<String, String> response = new HashMap<>();
-        response.put("apiName", apiName);
-        return response;
+        return intentService.analyzeIntentDetails(userInput);
     }
 } 

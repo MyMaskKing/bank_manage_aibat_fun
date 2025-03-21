@@ -123,9 +123,19 @@ public class IntentService {
         intentPatterns.put(intent, compiledPatterns);
     }
     
+    /**
+     * 分析用户输入，返回API名称 (原方法，保持向后兼容)
+     */
     public String analyzeIntent(String userInput) {
+        return analyzeIntentDetails(userInput).get("apiName").toString();
+    }
+    
+    /**
+     * 分析用户输入，返回详细API信息
+     */
+    public Map<String, Object> analyzeIntentDetails(String userInput) {
         if (!StringUtils.hasText(userInput)) {
-            return "UNKNOWN";
+            return createApiResponse("UNKNOWN", 1, Collections.emptyList());
         }
         
         // 提取所有客户名
@@ -146,17 +156,28 @@ public class IntentService {
                         apiName = "test_" + apiName;
                     }
                     
-                    // 如果找到多个客户名，将它们作为参数添加到API名称中
-                    if (customerNames.size() > 1) {
-                        apiName += "?customers=" + String.join(",", customerNames);
-                    }
+                    // 确定调用次数和参数
+                    int callCount = customerNames.isEmpty() ? 1 : customerNames.size();
+                    List<String> params = new ArrayList<>(customerNames);
                     
-                    return apiName;
+                    // 不要在apiName中添加客户名参数
+                    return createApiResponse(apiName, callCount, params);
                 }
             }
         }
         
-        return "UNKNOWN";
+        return createApiResponse("UNKNOWN", 1, Collections.emptyList());
+    }
+    
+    /**
+     * 创建API响应
+     */
+    private Map<String, Object> createApiResponse(String apiName, int callCount, List<String> params) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("apiName", apiName);
+        response.put("callCount", callCount);
+        response.put("params", params);
+        return response;
     }
     
     /**

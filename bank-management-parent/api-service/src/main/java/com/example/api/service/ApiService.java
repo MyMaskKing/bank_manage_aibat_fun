@@ -28,6 +28,14 @@ public class ApiService {
         apiHandlers.put("queryCustomer", this::handleQueryCustomer);
         apiHandlers.put("queryOtpStatus", this::handleQueryOtpStatus);
         apiHandlers.put("updateOtpFlg", this::handleUpdateOtpFlg);
+        
+        // 注册未实现的API处理器
+        apiHandlers.put("queryAccountBalance", input -> handleUnimplementedApi("查询账户余额", input));
+        apiHandlers.put("queryTransactionHistory", input -> handleUnimplementedApi("查询交易记录", input));
+        apiHandlers.put("transferMoney", input -> handleUnimplementedApi("转账", input));
+        apiHandlers.put("test_queryAccountBalance", input -> handleUnimplementedApi("查询账户余额", input));
+        apiHandlers.put("test_queryTransactionHistory", input -> handleUnimplementedApi("查询交易记录", input));
+        apiHandlers.put("test_transferMoney", input -> handleUnimplementedApi("转账", input));
     }
     
     /**
@@ -41,9 +49,12 @@ public class ApiService {
         
         ApiHandler handler = apiHandlers.get(apiName);
         if (handler == null) {
-            String error = "未找到API处理器: " + apiName;
-            log.error(error);
-            return error;
+            // 检查是否是测试中的API
+            if (apiName.startsWith("test_")) {
+                String actualApiName = apiName.substring(5);
+                return String.format("该功能（%s）正在开发测试中，暂时无法使用。", actualApiName);
+            }
+            return String.format("该功能（%s）正在开发中，暂时无法使用。", apiName);
         }
         
         try {
@@ -187,5 +198,22 @@ public class ApiService {
         }
         
         return defaultName;
+    }
+    
+    /**
+     * 处理未实现的API
+     */
+    private String handleUnimplementedApi(String apiName, String userInput) {
+        String customerName = extractCustomerName(userInput);
+        String timestamp = LocalDateTime.now().format(dateTimeFormatter);
+        
+        return String.format(
+            "%s功能正在开发中（%s）\n" +
+            "您要查询的客户是：%s\n" +
+            "该功能预计将在后续版本中提供。",
+            apiName,
+            timestamp,
+            customerName
+        );
     }
 } 
