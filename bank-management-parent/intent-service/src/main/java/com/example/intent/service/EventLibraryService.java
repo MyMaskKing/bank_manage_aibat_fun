@@ -273,7 +273,9 @@ public class EventLibraryService {
                 return createUnknownResult("个人事件未关联银行事件");
             }
             
-            // 获取第一个关联的银行事件配置
+            // 多个银行事件的情况下，我们只返回第一个的详细信息
+            // 前端已经能够根据 firstResult.relatedEvents 列表的内容
+            // 知道有哪些银行事件，但需要知道第一个银行事件的详细信息作为参考
             String bankEventName = relatedBankEvents.get(0);
             EventLibraryConfig bankConfig = bankEventLibrary.get(bankEventName);
             if (bankConfig == null) {
@@ -287,7 +289,7 @@ public class EventLibraryService {
             bankResult.setLibraryType(EventLibraryType.BANK);
             bankResult.setIntentName(bankEventName);
             bankResult.setDescription(bankConfig.getDescription());
-            bankResult.setRelatedEvents(relatedBankEvents);
+            bankResult.setRelatedEvents(bankConfig.getRelatedEventsList());
             bankResult.setConfidence(firstResult.getConfidence());
             
             // 合并参数：
@@ -295,41 +297,32 @@ public class EventLibraryService {
             Map<String, Object> mergedParams = new HashMap<>(firstResult.getParameters());
             
             // 2. 尝试从用户输入中提取银行事件特有的参数
-            Map<String, Pattern> bankParamPatterns = bankConfig.getParameterPatterns();
-            if (bankParamPatterns != null && !bankParamPatterns.isEmpty()) {
-                for (Map.Entry<String, Pattern> entry : bankParamPatterns.entrySet()) {
+            if (bankConfig.getParameterPatterns() != null) {
+                for (Map.Entry<String, Pattern> entry : bankConfig.getParameterPatterns().entrySet()) {
                     String paramName = entry.getKey();
                     Pattern pattern = entry.getValue();
-                    // 如果参数还没有值，尝试从用户输入中提取
-                    if (!mergedParams.containsKey(paramName)) {
-                        Matcher matcher = pattern.matcher(userInput);
-                        if (matcher.find()) {
-                            String match = matcher.group(1);
-                            if (match != null) {
-                                // 特殊处理某些参数类型
-                                if (paramName.equals("otpValue")) {
-                                    boolean otpValue = match.equals("开启") || match.equals("打开") || 
-                                                     match.equals("启用") || match.equals("激活") || 
-                                                     match.equals("true");
-                                    mergedParams.put(paramName, otpValue);
-                                } else {
-                                    mergedParams.put(paramName, match);
-                                }
-                            }
+                    
+                    Matcher matcher = pattern.matcher(userInput);
+                    if (matcher.find()) {
+                        String paramValue = matcher.group(1);
+                        if (paramName.equals("otpValue")) {
+                            boolean otpValue = paramValue.equals("开启") || paramValue.equals("打开") || 
+                                               paramValue.equals("启用") || paramValue.equals("激活") || 
+                                               paramValue.equals("true");
+                            mergedParams.put(paramName, otpValue);
+                        } else {
+                            mergedParams.put(paramName, paramValue);
                         }
                     }
                 }
             }
             
-            // 设置合并后的参数
             bankResult.setParameters(mergedParams);
-            
-            // 设置调用次数（保持与第一次解析一致）
             bankResult.setCallCount(firstResult.getCallCount());
             
             return bankResult;
         } else {
-            return createUnknownResult("不支持的事件库类型");
+            return createUnknownResult("无法识别的事件库类型");
         }
     }
     
@@ -351,7 +344,7 @@ public class EventLibraryService {
             return createUnknownResult("未找到银行事件配置");
         }
         
-        // 获取关联的标准事件
+        // 获取关联的标准事件 - 确保按照配置文件中定义的顺序
         List<String> standardEvents = bankConfig.getRelatedEventsList();
         if (standardEvents.isEmpty()) {
             return createUnknownResult("银行事件未关联标准事件");
@@ -368,7 +361,7 @@ public class EventLibraryService {
         // 设置标准事件特定信息
         finalResult.setLibraryType(EventLibraryType.STANDARD);
         finalResult.setIntentName(standardEvents.get(0));  // 使用第一个标准事件作为主事件
-        finalResult.setRelatedEvents(standardEvents);  // 设置关联的标准事件列表
+        finalResult.setRelatedEvents(standardEvents);  // 设置关联的标准事件列表，保持配置文件中的顺序
         
         return finalResult;
     }
@@ -449,9 +442,16 @@ public class EventLibraryService {
     }
     
     /**
+     * 获取银行事件配置
+     */
+    public EventLibraryConfig getBankEventConfig(String bankEventName) {
+        return bankEventLibrary.get(bankEventName);
+    }
+    
+    /**
      * 创建未知结果
      */
-    private IntentRecognitionResult createUnknownResult(String reason) {
+    public IntentRecognitionResult createUnknownResult(String reason) {
         IntentRecognitionResult result = new IntentRecognitionResult();
         result.setIntentName("UNKNOWN");
         result.setLibraryType(EventLibraryType.STANDARD);

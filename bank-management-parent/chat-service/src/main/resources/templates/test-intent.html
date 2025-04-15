@@ -94,6 +94,78 @@
             border-top: 1px solid #dee2e6;
             padding-top: 15px;
         }
+        /* 新增样式 */
+        .script-container {
+            background-color: #f8f9fa;
+            border-left: 4px solid #007bff;
+            border-radius: 3px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+        .script-step {
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px dashed #dee2e6;
+        }
+        .script-step:last-child {
+            border-bottom: none;
+        }
+        .step-number {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            line-height: 24px;
+            text-align: center;
+            background-color: #007bff;
+            color: white;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        .api-detail {
+            border-left: 3px solid #6c757d;
+            padding-left: 15px;
+            margin-top: 5px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        .param-mapping {
+            background-color: #f0f0f0;
+            border-radius: 3px;
+            padding: 10px;
+            margin-top: 10px;
+        }
+        .mapping-arrow {
+            margin: 0 5px;
+            color: #6c757d;
+        }
+        .api-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            margin: 0 2px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .api-crud {
+            background-color: #17a2b8;
+            color: white;
+        }
+        .api-table {
+            background-color: #6f42c1;
+            color: white;
+        }
+        .execution-controls {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
+        .card-separator {
+            height: 1px;
+            background-color: #dee2e6;
+            margin: 15px 0;
+        }
     </style>
 </head>
 <body>
@@ -185,23 +257,75 @@
                             
                             // 第一次解析结果
                             systemMessage += `<p><strong>已识别到意图：</strong>${response.firstResult.description}`;
-                            systemMessage += ` (${response.firstResult.intentName})</p>`;
+                            systemMessage += ` (${response.firstResult.intentName})`;
+                            
+                            // 添加事件类型标识
+                            if (response.firstResult.libraryType === 'PERSONAL') {
+                                systemMessage += ` <span class="badge badge-info">个人事件</span>`;
+                            } else if (response.firstResult.libraryType === 'BANK') {
+                                systemMessage += ` <span class="badge badge-warning">银行事件</span>`;
+                            }
+                            
+                            systemMessage += `</p>`;
+                            
+                            // 如果是个人事件，显示关联的银行事件
+                            if (response.firstResult.libraryType === 'PERSONAL' && response.firstResult.relatedEvents && response.firstResult.relatedEvents.length > 0) {
+                                systemMessage += `<p><strong>关联银行事件：</strong>`;
+                                
+                                response.firstResult.relatedEvents.forEach((event, idx) => {
+                                    systemMessage += `<span class="badge badge-success ml-1">${event}</span>`;
+                                });
+                                
+                                systemMessage += `</p>`;
+                            }
                             
                             // 第二次解析结果
                             if (response.secondResult && response.firstResult.libraryType === 'PERSONAL') {
-                                systemMessage += `<p><strong>关联银行事件：</strong>${response.secondResult.intentName}`;
-                                if (response.secondResult.description) {
-                                    systemMessage += ` - ${response.secondResult.description}`;
-                                }
-                                systemMessage += `</p>`;
+                                // 显示所有银行事件
+                                systemMessage += `<p><strong>银行事件详情:</strong></p>`;
+                                
+                                // 处理银行事件列表或单个银行事件
+                                let bankEvents = Array.isArray(response.secondResult) ? 
+                                    response.secondResult : [response.secondResult];
+                                
+                                bankEvents.forEach((bankEvent, index) => {
+                                    systemMessage += `<p class="ml-3">${index + 1}. ${bankEvent.intentName}`;
+                                    if (bankEvent.description) {
+                                        systemMessage += ` - ${bankEvent.description}`;
+                                    }
+                                    systemMessage += ` <span class="badge badge-warning">银行事件</span>`;
+                                    
+                                    // 添加银行事件关联的标准事件
+                                    if (bankEvent.relatedEvents && bankEvent.relatedEvents.length > 0) {
+                                        systemMessage += `<br><span class="ml-4">关联标准事件：</span>`;
+                                        bankEvent.relatedEvents.forEach(event => {
+                                            systemMessage += `<span class="badge badge-danger ml-1">${event}</span>`;
+                                        });
+                                    }
+                                    
+                                    systemMessage += `</p>`;
+                                });
                             }
                             
                             // 第三次解析结果
                             if (response.thirdResult && response.thirdResult.relatedEvents) {
                                 systemMessage += `<p><strong>将执行以下标准事件：</strong><br>`;
-                                response.thirdResult.relatedEvents.forEach(event => {
-                                    systemMessage += `- ${event}<br>`;
+                                
+                                // 获取所有标准事件
+                                const allStandardEvents = response.thirdResult.relatedEvents || [];
+                                
+                                // 为每个标准事件显示API信息
+                                allStandardEvents.forEach((event, index) => {
+                                    const apiInfo = getApiInfoByEvent(event);
+                                    
+                                    systemMessage += `
+                                    <div class="ml-3 mb-2">
+                                        <strong>${index + 1}. ${event}</strong><br>
+                                        <span class="ml-3">API: ${apiInfo.apiName}</span><br>
+                                        <span class="ml-3">操作: ${apiInfo.operation} ${apiInfo.table}</span>
+                                    </div>`;
                                 });
+                                
                                 systemMessage += `</p>`;
                                 
                                 // 显示参数
@@ -210,7 +334,7 @@
                                     systemMessage += `<p><strong>参数：</strong><br>`;
                                     
                                     if (params.customerNames) {
-                                        systemMessage += `- 客户: ${params.customerNames.join(', ')}<br>`;
+                                        systemMessage += `- 客户: ${Array.isArray(params.customerNames) ? params.customerNames.join(', ') : params.customerNames}<br>`;
                                     }
                                     if (params.otpValue !== undefined) {
                                         systemMessage += `- OTP值: ${params.otpValue ? '开启' : '关闭'}<br>`;
@@ -231,7 +355,15 @@
                                 }
                                 
                                 // 添加执行信息
-                                systemMessage += `<p><strong>执行次数：</strong>${response.thirdResult.callCount || 1}</p>`;
+                                const callCount = response.thirdResult.callCount || 1;
+                                systemMessage += `<p><strong>执行次数：</strong>${callCount}`;
+                                
+                                if (callCount > 1 && params.customerNames && Array.isArray(params.customerNames)) {
+                                    systemMessage += ` (批量处理: ${params.customerNames.join(', ')})`;
+                                }
+                                
+                                systemMessage += `</p>
+                                <p class="text-muted small">请在下方查看完整解析结果和执行脚本</p>`;
                             }
                             
                             systemMessage += `</div>`;
@@ -300,6 +432,61 @@
             }
             
             function displayResult(response, userInput) {
+                // 调试信息
+                console.log("原始响应:", JSON.stringify(response, null, 2));
+                if (response.secondResult) {
+                    console.log("第二次解析结果:", JSON.stringify(response.secondResult, null, 2));
+                    console.log("第二次解析关联事件:", JSON.stringify(response.secondResult.relatedEvents, null, 2));
+                }
+                
+                // 手动补充第二个银行事件的信息（模拟后端返回完整数据）
+                let secondBankEvents = [];
+                
+                // 把原有的secondResult放入数组
+                if (response.secondResult) {
+                    secondBankEvents.push(response.secondResult);
+                }
+                
+                // 检查firstResult中是否有其他银行事件
+                if (response.firstResult && 
+                    response.firstResult.libraryType === 'PERSONAL' && 
+                    response.firstResult.relatedEvents && 
+                    response.firstResult.relatedEvents.length > 1) {
+                    
+                    // 获取除了secondResult.intentName以外的其他银行事件
+                    const otherBankEvents = response.firstResult.relatedEvents.filter(
+                        event => event !== (response.secondResult ? response.secondResult.intentName : '')
+                    );
+                    
+                    // 为每个缺失的银行事件创建模拟数据
+                    otherBankEvents.forEach(bankEventName => {
+                        // 为不同的银行事件设置不同的关联标准事件
+                        let relatedStandardEvents = [];
+                        
+                        if (bankEventName === 'BANK_SEND_NOTIFICATION') {
+                            relatedStandardEvents = ['STANDARD_SEND_EMAIL', 'STANDARD_SEND_SMS'];
+                        } else if (bankEventName === 'BANK_OTP_UPDATE') {
+                            relatedStandardEvents = ['STANDARD_UPDATE_OTP', 'STANDARD_LOG_OPERATION'];
+                        } else {
+                            // 默认关联的标准事件
+                            relatedStandardEvents = ['STANDARD_LOG_OPERATION'];
+                        }
+                        
+                        // 创建模拟的银行事件数据
+                        const mockBankEvent = {
+                            intentName: bankEventName,
+                            libraryType: 'BANK',
+                            relatedEvents: relatedStandardEvents,
+                            callCount: response.firstResult.callCount || 1,
+                            parameters: {...response.firstResult.parameters},
+                            confidence: response.firstResult.confidence,
+                            description: getBankEventDescription(bankEventName)
+                        };
+                        
+                        secondBankEvents.push(mockBankEvent);
+                    });
+                }
+                
                 let resultHtml = '';
                 
                 // 解析链视图
@@ -326,41 +513,18 @@
                                 <div class="small">${response.firstResult.description || ''}</div>
                             </div>
                         `;
-                    }
-                    
-                    // 添加箭头和第二次解析
-                    if (response.secondResult) {
-                        resultHtml += `
-                            <div class="chain-arrow">→</div>
-                            <div class="text-center">
-                                <div class="event-badge bank-event">${response.secondResult.libraryType}</div>
-                                <div><strong>${response.secondResult.intentName}</strong></div>
-                                <div class="small">${response.secondResult.description || ''}</div>
-                            </div>
-                        `;
-                    }
-                    
-                    // 添加箭头和第三次解析
-                    if (response.thirdResult) {
-                        resultHtml += `
-                            <div class="chain-arrow">→</div>
-                            <div class="text-center">
-                                <div class="event-badge standard-event">${response.thirdResult.libraryType}</div>
-                                <div><strong>${response.thirdResult.intentName}</strong></div>
-                            </div>
-                        `;
                         
-                        // 展示关联的标准事件
-                        if (response.thirdResult.relatedEvents && response.thirdResult.relatedEvents.length > 0) {
+                        // 增加第一次解析的关联银行事件显示（仅对个人事件）
+                        if (response.firstResult.libraryType === 'PERSONAL' && response.firstResult.relatedEvents && response.firstResult.relatedEvents.length > 0) {
                             resultHtml += `
                                 <div class="chain-arrow">→</div>
                                 <div>
-                                    <div><strong>标准事件:</strong></div>
+                                    <div><strong>关联银行事件:</strong></div>
                                     <div>
                             `;
                             
-                            response.thirdResult.relatedEvents.forEach(event => {
-                                resultHtml += `<div class="event-badge standard-event">${event}</div>`;
+                            response.firstResult.relatedEvents.forEach(event => {
+                                resultHtml += `<div class="event-badge bank-event">${event}</div>`;
                             });
                             
                             resultHtml += `
@@ -368,6 +532,75 @@
                                 </div>
                             `;
                         }
+                    }
+                    
+                    // 添加箭头和第二次解析（银行事件）
+                    if (response.secondResult) {
+                        resultHtml += `<div class="chain-arrow">→</div>`;
+                        
+                        // 检查是否有多个银行事件
+                        if (Array.isArray(response.secondResult)) {
+                            // 多个银行事件的显示
+                            resultHtml += `
+                                <div>
+                                    <div><strong>银行事件:</strong></div>
+                                    <div class="d-flex flex-column">
+                            `;
+                            
+                            // 显示每个银行事件
+                            response.secondResult.forEach(bankEvent => {
+                                resultHtml += `
+                                    <div class="mb-2">
+                                        <div class="event-badge bank-event">${bankEvent.libraryType}</div>
+                                        <strong>${bankEvent.intentName}</strong>
+                                        <div class="small">${bankEvent.description || ''}</div>
+                                    </div>
+                                `;
+                            });
+                            
+                            resultHtml += `
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            // 单个银行事件的显示
+                            const bankEvent = response.secondResult;
+                            resultHtml += `
+                                <div class="text-center">
+                                    <div class="event-badge bank-event">${bankEvent.libraryType}</div>
+                                    <div><strong>${bankEvent.intentName}</strong></div>
+                                    <div class="small">${bankEvent.description || ''}</div>
+                                </div>
+                            `;
+                        }
+                        
+                        // 显示所有银行事件关联的标准事件
+                        resultHtml += `
+                            <div class="chain-arrow">→</div>
+                            <div>
+                                <div><strong>关联标准事件:</strong></div>
+                                <div>
+                        `;
+                        
+                        // 收集所有不重复的标准事件
+                        const allStandardEvents = new Set();
+                        
+                        // 从第三次解析结果中获取
+                        if (response.thirdResult && response.thirdResult.relatedEvents) {
+                            response.thirdResult.relatedEvents.forEach(event => {
+                                allStandardEvents.add(event);
+                            });
+                        }
+                        
+                        // 显示所有标准事件
+                        [...allStandardEvents].forEach(event => {
+                            resultHtml += `<div class="event-badge standard-event">${event}</div>`;
+                        });
+                        
+                        resultHtml += `
+                                </div>
+                            </div>
+                        `;
                     }
                     
                     resultHtml += `
@@ -421,6 +654,88 @@
                                 </div>
                             </div>
                         `;
+                        
+                        // 添加执行脚本显示
+                        resultHtml += `
+                            <div class="card-separator"></div>
+                            <div class="mt-3">
+                                <h5>执行脚本</h5>
+                                <div class="script-container">
+                        `;
+                        
+                        // 获取标准事件列表
+                        const allStandardEvents = response.thirdResult.relatedEvents || [];
+                        
+                        // 如果有多个客户或者多次调用
+                        const callCount = response.thirdResult.callCount || 1;
+                        let customerNames = params.customerNames || ['默认客户'];
+                        if (!Array.isArray(customerNames)) {
+                            customerNames = [customerNames];
+                        }
+                        
+                        // 生成每次执行的脚本
+                        for (let i = 0; i < callCount && i < customerNames.length; i++) {
+                            const customerName = customerNames[i];
+                            resultHtml += `
+                                <div class="script-execution mb-3 pb-2 border-bottom">
+                                    <h6><strong>执行 #${i+1}</strong> - 客户: ${customerName}</h6>
+                            `;
+                            
+                            // 遍历关联的标准事件
+                            if (allStandardEvents.length > 0) {
+                                allStandardEvents.forEach((event, index) => {
+                                    let apiInfo = getApiInfoByEvent(event);
+                                    resultHtml += `
+                                        <div class="script-step">
+                                            <div><span class="step-number">${index+1}</span><strong>${event}</strong></div>
+                                            <div class="api-detail">
+                                                <div><strong>API名称:</strong> ${apiInfo.apiName}</div>
+                                                <div>
+                                                    <strong>操作类型:</strong> 
+                                                    <span class="api-badge api-crud">${apiInfo.operation}</span>
+                                                    <span class="api-badge api-table">${apiInfo.table}</span>
+                                                </div>
+                                                <div><strong>入力参数:</strong></div>
+                                                <div class="pl-3">
+                                    `;
+                                    
+                                    // 显示该API的入力参数
+                                    for (const [key, value] of Object.entries(apiInfo.parameters)) {
+                                        let paramValue = value;
+                                        if (key === 'customerName') {
+                                            paramValue = customerName;
+                                        } else if (params[key] !== undefined) {
+                                            paramValue = formatParameterValue(params[key]);
+                                        }
+                                        
+                                        resultHtml += `<div>${key}: ${paramValue}</div>`;
+                                    }
+                                    
+                                    resultHtml += `
+                                                </div>
+                                                <div><strong>返回值:</strong> ${apiInfo.returnValue}</div>
+                                            </div>
+                                        </div>
+                                    `;
+                                });
+                            } else {
+                                resultHtml += `<div class="text-muted">无标准事件可执行</div>`;
+                            }
+                            
+                            resultHtml += `</div>`;
+                        }
+                        
+                        resultHtml += `
+                                </div>
+                                <div class="execution-controls">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div><strong>总执行次数:</strong> ${callCount}</div>
+                                        <button class="btn btn-sm btn-outline-primary" disabled>模拟执行</button>
+                                    </div>
+                                    <div class="small text-muted mt-2">注：此处仅显示执行脚本，不实际执行API调用</div>
+                                </div>
+                            </div>
+                        `;
                     }
                     
                     resultHtml += `
@@ -429,31 +744,72 @@
                     `;
                 }
                 
-                // 第一次解析结果
+                // 第一次解析结果（个人事件）
                 if (response.firstResult) {
                     resultHtml += createResultCard(
                         response.firstResult,
                         1,
-                        null  // 第一次解析没有前置结果
+                        null
                     );
                 }
                 
-                // 第二次解析结果
+                // 第二次解析结果（银行事件）
                 if (response.secondResult) {
-                    resultHtml += createResultCard(
-                        response.secondResult,
-                        2,
-                        response.firstResult  // 使用第一次解析的结果作为参数来源
-                    );
+                    // 检查是否有多个银行事件
+                    if (Array.isArray(response.secondResult)) {
+                        // 显示多个银行事件
+                        response.secondResult.forEach(bankEvent => {
+                            resultHtml += createResultCard(
+                                bankEvent,
+                                2,
+                                response.firstResult
+                            );
+                        });
+                    } else {
+                        // 单个银行事件
+                        resultHtml += createResultCard(
+                            response.secondResult,
+                            2,
+                            response.firstResult
+                        );
+                    }
                 }
                 
-                // 第三次解析结果
+                // 第三次解析结果（标准事件）
                 if (response.thirdResult) {
-                    resultHtml += createResultCard(
-                        response.thirdResult,
-                        3,
-                        response.secondResult  // 使用第二次解析的结果作为参数来源
-                    );
+                    // 处理标准事件特殊显示
+                    const thirdResult = {...response.thirdResult};
+                    
+                    // 收集所有关联的标准事件
+                    let allStandardEvents = [];
+                    
+                    if (thirdResult.relatedEvents && thirdResult.relatedEvents.length > 0) {
+                        // 将relatedEvents转换为包含必要信息的对象数组
+                        allStandardEvents = thirdResult.relatedEvents.map(eventName => {
+                            return {
+                                name: eventName,
+                                event: eventName,
+                                description: getStandardEventDescription(eventName),
+                                confidence: thirdResult.confidence || 0.8,
+                                executionCount: thirdResult.callCount || 1,
+                                parameters: thirdResult.parameters || {}
+                            };
+                        });
+                    }
+                    
+                    // 创建标准事件API信息卡片
+                    resultHtml += `
+                    <div id="thirdResult">
+                        <div class="card mb-4">
+                            <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0"><i class="fas fa-exchange-alt mr-2"></i>标准事件API信息</h5>
+                            </div>
+                            <div class="card-body">
+                                ${createApiInfoCard(allStandardEvents)}
+                            </div>
+                        </div>
+                    </div>
+                    `;
                 }
                 
                 if (resultHtml === '') {
@@ -489,19 +845,33 @@
                     <div class="card-body">
                         <h5 class="card-title">
                             <span class="badge ${badgeClass}">${intentName}</span>
-                            <small class="text-muted ml-2">置信度: ${(result.confidence * 100).toFixed(2)}%</small>
+                            <small class="text-muted ml-2">置信度: ${result.confidence ? (result.confidence * 100).toFixed(2) : 0}%</small>
                         </h5>`;
 
                 // 显示关联事件（如果有）
                 if (result.relatedEvents && result.relatedEvents.length > 0) {
                     html += `
                     <div class="related-events mb-3">
-                        <h6>关联事件:</h6>
-                        <div>`;
+                        <h6>关联事件:`;
+                    
+                    // 根据解析步骤添加不同的事件类型标识
+                    if (parseStep === 1) {
+                        html += ` <span class="badge badge-light">银行事件</span>`;
+                    } else if (parseStep === 2) {
+                        html += ` <span class="badge badge-light">标准事件</span>`;
+                    }
+                    
+                    html += `</h6><div>`;
+                    
+                    // 显示关联事件，并添加适当的样式
                     result.relatedEvents.forEach(event => {
-                        html += `<span class="badge badge-secondary mr-2">${event}</span>`;
+                        let eventBadgeClass = parseStep === 1 ? 'badge-success' : 'badge-danger';
+                        html += `<span class="badge ${eventBadgeClass} mr-2">${event}</span>`;
                     });
+                    
                     html += `</div></div>`;
+                } else {
+                    html += `<div class="related-events mb-3"><div class="text-muted">无关联事件</div></div>`;
                 }
 
                 // 显示参数表格
@@ -517,47 +887,378 @@
                     return '<p>无参数</p>';
                 }
                 
-                // 合并前一次解析的参数
-                const mergedParameters = { ...(previousParameters || {}), ...(parameters || {}) };
+                // 当前解析有参数
+                const currentParams = parameters || {};
+                // 前一次解析的参数
+                const prevParams = previousParameters || {};
                 
                 let html = `
-                <table class="table table-bordered">
+                <div class="mt-3">
+                    <h6>参数提取</h6>
+                    <table class="table table-bordered table-sm">
                     <thead>
                         <tr>
                             <th>参数名</th>
                             <th>参数值</th>
-                            <th>参数类型</th>
+                                <th>参数来源</th>
                         </tr>
                     </thead>
                     <tbody>`;
                 
-                for (const [key, value] of Object.entries(mergedParameters)) {
-                    const type = Array.isArray(value) ? 'Array' : 
-                                 typeof value === 'boolean' ? 'Boolean' :
-                                 typeof value === 'object' && value !== null ? 'Object' : 'String';
+                // 合并所有参数
+                const allKeys = new Set([...Object.keys(currentParams), ...Object.keys(prevParams)]);
+                
+                // 处理每个参数
+                Array.from(allKeys).sort().forEach(key => {
+                    const currentValue = currentParams[key];
+                    const prevValue = prevParams[key];
+                    let source = '';
+                    let displayValue = '';
+                    
+                    // 确定参数来源
+                    if (currentValue !== undefined && prevValue === undefined) {
+                        // 当前层提取的新参数
+                        source = '<span class="badge badge-success">当前解析</span>';
+                        displayValue = formatParameterValue(currentValue);
+                    } else if (currentValue !== undefined && prevValue !== undefined) {
+                        // 参数被重新赋值
+                        if (JSON.stringify(currentValue) !== JSON.stringify(prevValue)) {
+                            source = '<span class="badge badge-warning">更新</span>';
+                            displayValue = `
+                                <div>${formatParameterValue(prevValue)}</div>
+                                <div class="text-muted">↓</div>
+                                <div>${formatParameterValue(currentValue)}</div>
+                            `;
+                        } else {
+                            // 参数未变化
+                            source = '<span class="badge badge-secondary">继承</span>';
+                            displayValue = formatParameterValue(currentValue);
+                        }
+                    } else {
+                        // 仅存在于前一次解析的参数
+                        source = '<span class="badge badge-info">上一层</span>';
+                        displayValue = formatParameterValue(prevValue);
+                    }
                     
                     html += `
                     <tr>
-                        <td>${key}</td>
-                        <td>${formatParameterValue(value)}</td>
-                        <td>${type}</td>
+                        <td><strong>${key}</strong></td>
+                        <td>${displayValue}</td>
+                        <td>${source}</td>
                     </tr>`;
-                }
+                });
                 
                 html += '</tbody></table>';
+                
+                // 添加参数映射关系图
+                if (Object.keys(prevParams).length > 0 && Object.keys(currentParams).length > 0) {
+                    html += `
+                    <div class="param-mapping mt-3">
+                        <h6>参数映射关系</h6>
+                        <div class="d-flex flex-wrap">`;
+                    
+                    // 找出前一层与当前层共有的参数
+                    const commonKeys = Object.keys(prevParams).filter(key => currentParams[key] !== undefined);
+                    
+                    if (commonKeys.length > 0) {
+                        commonKeys.forEach(key => {
+                            const prevValue = formatParameterValue(prevParams[key]);
+                            const currentValue = formatParameterValue(currentParams[key]);
+                            const isChanged = JSON.stringify(prevParams[key]) !== JSON.stringify(currentParams[key]);
+                            
+                            html += `
+                            <div class="mr-3 mb-2">
+                                <div class="d-flex align-items-center">
+                                    <div><strong>${key}</strong>: ${prevValue}</div>
+                                    <div class="mapping-arrow">→</div>
+                                    <div><strong>${key}</strong>: ${currentValue} ${isChanged ? '<span class="badge badge-warning">已变更</span>' : ''}</div>
+                                </div>
+                            </div>`;
+                        });
+                    } else {
+                        html += `<div class="text-muted">无参数映射关系</div>`;
+                    }
+                    
+                    html += `
+                        </div>
+                    </div>`;
+                }
+                
                 return html;
             }
             
+            // 格式化参数值显示
             function formatParameterValue(value) {
-                if (Array.isArray(value)) {
-                    return value.join(', ');
-                } else if (typeof value === 'boolean') {
-                    return value ? '开启/true' : '关闭/false';
-                } else if (typeof value === 'object' && value !== null) {
-                    return JSON.stringify(value);
-                } else {
-                    return value;
+                if (value === undefined || value === null) {
+                    return "未提供";
                 }
+                
+                if (typeof value === 'object') {
+                    return JSON.stringify(value);
+                }
+                
+                return value.toString();
+            }
+            
+            // 获取标准事件描述
+            function getStandardEventDescription(eventName) {
+                const descriptions = {
+                    'STANDARD_QUERY_CUSTOMER': '查询客户信息的标准API',
+                    'STANDARD_UPDATE_CUSTOMER': '更新客户信息的标准API',
+                    'STANDARD_QUERY_OTP': '查询OTP状态的标准API',
+                    'STANDARD_UPDATE_OTP': '更新OTP状态的标准API',
+                    'STANDARD_LOG_OPERATION': '记录系统操作日志的标准API',
+                    'STANDARD_SEND_EMAIL': '发送电子邮件的标准API',
+                    'STANDARD_SEND_SMS': '发送短信的标准API'
+                };
+                
+                return descriptions[eventName] || '未知标准事件';
+            }
+            
+            // 获取标准事件的API信息
+            function getApiInfoByEvent(eventName) {
+                // 标准事件API信息映射
+                const apiInfoMap = {
+                    "STANDARD_QUERY_CUSTOMER": {
+                        apiName: "queryCustomer",
+                        operation: "查询",
+                        table: "customers",
+                        parameters: {
+                            customerName: "客户姓名"
+                        },
+                        returnValue: "客户信息(ID、姓名、OTP状态等)"
+                    },
+                    "STANDARD_UPDATE_CUSTOMER": {
+                        apiName: "updateCustomer",
+                        operation: "更新",
+                        table: "customers",
+                        parameters: {
+                            customerName: "客户姓名",
+                            fieldName: "字段名",
+                            fieldValue: "字段值"
+                        },
+                        returnValue: "更新结果状态"
+                    },
+                    "STANDARD_QUERY_OTP": {
+                        apiName: "queryOtpStatus",
+                        operation: "查询",
+                        table: "customers",
+                        parameters: {
+                            customerName: "客户姓名"
+                        },
+                        returnValue: "OTP状态值"
+                    },
+                    "STANDARD_UPDATE_OTP": {
+                        apiName: "updateOtpFlg",
+                        operation: "更新",
+                        table: "customers",
+                        parameters: {
+                            customerName: "客户姓名",
+                            otpValue: "OTP状态值(true/false)"
+                        },
+                        returnValue: "更新后的OTP状态"
+                    },
+                    "STANDARD_LOG_OPERATION": {
+                        apiName: "logOperation",
+                        operation: "插入",
+                        table: "operation_logs",
+                        parameters: {
+                            operationType: "操作类型",
+                            targetId: "目标ID",
+                            details: "操作详情"
+                        },
+                        returnValue: "日志记录ID"
+                    },
+                    "STANDARD_SEND_EMAIL": {
+                        apiName: "sendEmail",
+                        operation: "发送",
+                        table: "EMAIL服务",
+                        parameters: {
+                            recipientName: "收件人姓名",
+                            recipientEmail: "收件人邮箱",
+                            subject: "邮件主题",
+                            content: "邮件内容"
+                        },
+                        returnValue: "发送状态结果"
+                    },
+                    "STANDARD_SEND_SMS": {
+                        apiName: "sendSms",
+                        operation: "发送",
+                        table: "SMS服务",
+                        parameters: {
+                            phoneNumber: "手机号码",
+                            content: "短信内容"
+                        },
+                        returnValue: "发送状态结果"
+                    },
+                    // 保留原有示例数据，以备参考
+                    "查询余额": {
+                        apiName: "queryBalance",
+                        operation: "查询",
+                        table: "Account",
+                        parameters: {
+                            customerName: "客户名",
+                            accountId: "账户ID"
+                        },
+                        returnValue: "余额信息对象"
+                    },
+                    "查询交易记录": {
+                        apiName: "queryTransactions",
+                        operation: "查询",
+                        table: "Transaction",
+                        parameters: {
+                            customerName: "客户名",
+                            accountId: "账户ID",
+                            startDate: "开始日期",
+                            endDate: "结束日期"
+                        },
+                        returnValue: "交易记录列表"
+                    },
+                    "转账": {
+                        apiName: "transferMoney",
+                        operation: "更新",
+                        table: "Account",
+                        parameters: {
+                            customerName: "客户名",
+                            fromAccount: "源账户",
+                            toAccount: "目标账户",
+                            amount: "金额"
+                        },
+                        returnValue: "转账结果对象"
+                    },
+                    "存款": {
+                        apiName: "deposit",
+                        operation: "更新",
+                        table: "Account",
+                        parameters: {
+                            customerName: "客户名",
+                            accountId: "账户ID",
+                            amount: "金额"
+                        },
+                        returnValue: "存款结果对象"
+                    },
+                    "取款": {
+                        apiName: "withdraw",
+                        operation: "更新",
+                        table: "Account",
+                        parameters: {
+                            customerName: "客户名",
+                            accountId: "账户ID",
+                            amount: "金额"
+                        },
+                        returnValue: "取款结果对象"
+                    }
+                };
+                
+                return apiInfoMap[eventName] || {
+                    apiName: eventName,
+                    operation: "未知",
+                    table: "未知",
+                    parameters: {
+                        customerName: "客户名"
+                    },
+                    returnValue: "未知"
+                };
+            }
+            
+            // 获取银行事件描述
+            function getBankEventDescription(eventName) {
+                const descriptions = {
+                    'BANK_OTP_UPDATE': '更新客户OTP状态',
+                    'BANK_SEND_NOTIFICATION': '发送通知消息',
+                    'BANK_CUSTOMER_INFO': '查询客户信息',
+                    'BANK_OTP_STATUS': '查询OTP状态'
+                };
+                
+                return descriptions[eventName] || '未知银行事件';
+            }
+
+            // 创建API信息卡片
+            function createApiInfoCard(events) {
+                if (!events || events.length === 0) {
+                    return '<div class="alert alert-info">未检测到标准事件</div>';
+                }
+                
+                let html = '';
+                
+                events.forEach((event, index) => {
+                    const apiInfo = getApiInfoByEvent(event.event || event.name);
+                    
+                    html += `
+                    <div class="card mb-3">
+                        <div class="card-header bg-primary text-white">
+                            <strong>${event.event || event.name}</strong>
+                            <span class="badge badge-light float-right">置信度: ${(event.confidence * 100).toFixed(2)}%</span>
+                        </div>
+                        <div class="card-body">
+                            <p>${event.description || '无描述'}</p>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h5>API信息</h5>
+                                    <ul class="list-group">
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            API名称
+                                            <span class="badge badge-primary">${apiInfo.apiName}</span>
+                                        </li>
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            操作类型
+                                            <span class="badge badge-secondary">${apiInfo.operation}</span>
+                                        </li>
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            数据表
+                                            <span class="badge badge-info">${apiInfo.table}</span>
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div class="col-md-6">
+                                    <h5>执行信息</h5>
+                                    <ul class="list-group">
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            执行次数
+                                            <span class="badge badge-success">${event.executionCount || 1}</span>
+                                        </li>
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            识别置信度
+                                            <span class="badge badge-warning">${(event.confidence * 100).toFixed(2)}%</span>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                            
+                            <h5 class="mt-3">输入参数</h5>
+                            <table class="table table-sm table-bordered">
+                                <thead class="thead-light">
+                                    <tr>
+                                        <th>参数名</th>
+                                        <th>描述</th>
+                                        <th>值</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${Object.entries(apiInfo.parameters).map(([key, desc]) => `
+                                        <tr>
+                                            <td><code>${key}</code></td>
+                                            <td>${desc}</td>
+                                            <td>
+                                                ${event.parameters && event.parameters[key] 
+                                                    ? `<span class="badge badge-success">${formatParameterValue(event.parameters[key])}</span>`
+                                                    : `<span class="text-muted">未提供</span>`}
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                            
+                            <h5 class="mt-3">返回值</h5>
+                            <div class="alert alert-secondary">
+                                ${apiInfo.returnValue}
+                            </div>
+                        </div>
+                    </div>
+                    `;
+                });
+                
+                return html;
             }
         });
     </script>

@@ -8,13 +8,15 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
+import java.util.logging.Logger;
 
 /**
  * 意图识别测试控制器
  */
 @Controller
 public class TestIntentController {
-
+    
+    private static final Logger logger = Logger.getLogger(TestIntentController.class.getName());
     private final RestTemplate restTemplate;
     
     public TestIntentController(RestTemplate restTemplate) {
@@ -35,10 +37,16 @@ public class TestIntentController {
     @PostMapping("/intent/parse/full")
     @ResponseBody
     public Map<String, Object> parseIntent(@RequestBody Map<String, String> request) {
-        return restTemplate.postForObject(
+        logger.info("发送意图解析请求: " + request);
+        Map<String, Object> response = restTemplate.postForObject(
             "http://localhost:8081/intent/parse/full",
             request,
             Map.class
         );
+        
+        // 日志记录响应，帮助调试
+        logger.info("收到意图解析响应: " + response);
+        
+        return response;
     }
 } 
