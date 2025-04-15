@@ -19,4 +19,14 @@ spring:
 logging:
   level:
     org.springframework: INFO
-    com.example.intent: DEBUG 
+    com.example.intent: DEBUG
+
+# 意图识别配置
+intent:
+  libraries:
+    # 事件库配置文件路径
+    personal: classpath:intents/personal_event_patterns.md
+    bank: classpath:intents/bank_event_patterns.md
+    standard: classpath:intents/standard_event_patterns.md
+  # 启用多级解析
+  multi-level-parsing: true 

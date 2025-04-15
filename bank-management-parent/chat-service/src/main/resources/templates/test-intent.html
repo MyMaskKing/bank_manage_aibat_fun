@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>银行系统意图识别测试</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css">
+    <style>
+        .chat-container {
+            height: 500px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #f8f9fa;
+        }
+        .user-message {
+            background-color: #007bff;
+            color: white;
+            border-radius: 15px;
+            padding: 8px 15px;
+            margin-bottom: 10px;
+            max-width: 70%;
+            align-self: flex-end;
+            margin-left: auto;
+        }
+        .system-message {
+            background-color: #f1f1f1;
+            border-radius: 15px;
+            padding: 8px 15px;
+            margin-bottom: 10px;
+            max-width: 70%;
+        }
+        .pre-json {
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 12px;
+            background-color: #f8f9fa;
+            border: 1px solid #eaeaea;
+            border-radius: 3px;
+            padding: 10px;
+        }
+        .result-card {
+            margin-bottom: 15px;
+        }
+        .parse-step {
+            font-weight: bold;
+            color: #28a745;
+        }
+        .event-badge {
+            display: inline-block;
+            padding: 3px 7px;
+            margin-right: 5px;
+            margin-bottom: 5px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .personal-event {
+            background-color: #007bff;
+            color: white;
+        }
+        .bank-event {
+            background-color: #28a745;
+            color: white;
+        }
+        .standard-event {
+            background-color: #dc3545;
+            color: white;
+        }
+        .param-table {
+            width: 100%;
+            margin-bottom: 15px;
+        }
+        .param-table th {
+            background-color: #f0f0f0;
+        }
+        .event-chain {
+            margin: 15px 0;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            border-left: 4px solid #28a745;
+        }
+        .chain-arrow {
+            color: #6c757d;
+            font-size: 20px;
+            margin: 0 10px;
+        }
+        .detail-section {
+            margin-top: 15px;
+            border-top: 1px solid #dee2e6;
+            padding-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-12">
+                <h2 class="text-center mb-4">银行系统三层意图识别测试</h2>
+                <div class="card mb-4">
+                    <div class="card-header">聊天窗口</div>
+                    <div class="card-body">
+                        <div id="chatContainer" class="chat-container">
+                            <div class="system-message">
+                                您好，请输入您要测试的意图，例如：<br>
+                                - 查询张三的客户信息和OTP状态<br>
+                                - 更新张三的OTP状态为关闭并发送通知<br>
+                                - 关闭李四和王五的OTP
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <input type="text" id="userInput" class="form-control" placeholder="请输入您的指令...">
+                            <div class="input-group-append">
+                                <button class="btn btn-primary" id="sendBtn">发送</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">意图识别结果</div>
+                    <div class="card-body">
+                        <div id="resultContainer">
+                            <div class="alert alert-info">尚未进行任何测试，请在上方输入框中输入指令并点击发送。</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            $('#sendBtn').click(function() {
+                sendMessage();
+            });
+            
+            $('#userInput').keypress(function(e) {
+                if (e.which === 13) {
+                    sendMessage();
+                }
+            });
+            
+            function sendMessage() {
+                const userInput = $('#userInput').val().trim();
+                if (userInput === '') return;
+                
+                // 添加用户消息到聊天窗口
+                $('#chatContainer').append(
+                    `<div class="user-message">${userInput}</div>`
+                );
+                
+                // 清空输入框
+                $('#userInput').val('');
+                
+                // 显示加载中...
+                $('#chatContainer').append(
+                    `<div class="system-message" id="loadingMessage">正在分析意图，请稍候...</div>`
+                );
+                $('#chatContainer').scrollTop($('#chatContainer')[0].scrollHeight);
+                
+                // 调用三步解析API
+                $.ajax({
+                    url: '/intent/parse/full',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ userInput: userInput }),
+                    success: function(response) {
+                        // 移除加载消息
+                        $('#loadingMessage').remove();
+                        
+                        // 显示结果
+                        displayResult(response, userInput);
+                        
+                        // 添加系统回复到聊天窗口
+                        let systemMessage = '意图识别完成！';
+                        if (response.firstResult && response.firstResult.confidence > 0) {
+                            systemMessage = `<div>`;
+                            
+                            // 第一次解析结果
+                            systemMessage += `<p><strong>已识别到意图：</strong>${response.firstResult.description}`;
+                            systemMessage += ` (${response.firstResult.intentName})</p>`;
+                            
+                            // 第二次解析结果
+                            if (response.secondResult && response.firstResult.libraryType === 'PERSONAL') {
+                                systemMessage += `<p><strong>关联银行事件：</strong>${response.secondResult.intentName}`;
+                                if (response.secondResult.description) {
+                                    systemMessage += ` - ${response.secondResult.description}`;
+                                }
+                                systemMessage += `</p>`;
+                            }
+                            
+                            // 第三次解析结果
+                            if (response.thirdResult && response.thirdResult.relatedEvents) {
+                                systemMessage += `<p><strong>将执行以下标准事件：</strong><br>`;
+                                response.thirdResult.relatedEvents.forEach(event => {
+                                    systemMessage += `- ${event}<br>`;
+                                });
+                                systemMessage += `</p>`;
+                                
+                                // 显示参数
+                                if (response.thirdResult.parameters) {
+                                    const params = response.thirdResult.parameters;
+                                    systemMessage += `<p><strong>参数：</strong><br>`;
+                                    
+                                    if (params.customerNames) {
+                                        systemMessage += `- 客户: ${params.customerNames.join(', ')}<br>`;
+                                    }
+                                    if (params.otpValue !== undefined) {
+                                        systemMessage += `- OTP值: ${params.otpValue ? '开启' : '关闭'}<br>`;
+                                    }
+                                    
+                                    // 显示其他所有参数
+                                    Object.keys(params).forEach(key => {
+                                        if (key !== 'customerNames' && key !== 'otpValue') {
+                                            let value = params[key];
+                                            if (typeof value === 'object') {
+                                                value = JSON.stringify(value);
+                                            }
+                                            systemMessage += `- ${key}: ${value}<br>`;
+                                        }
+                                    });
+                                    
+                                    systemMessage += `</p>`;
+                                }
+                                
+                                // 添加执行信息
+                                systemMessage += `<p><strong>执行次数：</strong>${response.thirdResult.callCount || 1}</p>`;
+                            }
+                            
+                            systemMessage += `</div>`;
+                        } else {
+                            systemMessage = '未能识别您的意图，请换个说法再试。';
+                        }
+                        
+                        $('#chatContainer').append(
+                            `<div class="system-message">${systemMessage}</div>`
+                        );
+                        $('#chatContainer').scrollTop($('#chatContainer')[0].scrollHeight);
+                    },
+                    error: function(xhr, status, error) {
+                        $('#loadingMessage').remove();
+                        
+                        // 获取更详细的错误信息
+                        let errorDetails = '';
+                        if (xhr.responseJSON) {
+                            errorDetails = xhr.responseJSON.message || xhr.responseJSON.error || JSON.stringify(xhr.responseJSON);
+                        } else if (xhr.responseText) {
+                            try {
+                                const errorObj = JSON.parse(xhr.responseText);
+                                errorDetails = errorObj.message || errorObj.error || xhr.responseText;
+                            } catch(e) {
+                                errorDetails = xhr.responseText.substring(0, 150) + '...';
+                            }
+                        } else {
+                            errorDetails = error || status;
+                        }
+                        
+                        // 特殊错误处理 - 主机名解析错误
+                        if (errorDetails.includes('UnknownHostException') || errorDetails.includes('intent-service')) {
+                            errorDetails = '无法连接到意图识别服务 (intent-service)。请检查:<br>' +
+                                '1. 意图识别服务是否已启动（端口8081）<br>' +
+                                '2. TestIntentController中的服务地址是否使用了localhost而非服务名<br>' +
+                                '查看错误详情: ' + error;
+                        }
+                        
+                        // 特殊错误处理 - 连接被拒绝
+                        if (errorDetails.includes('Connection refused') || errorDetails.includes('ConnectException')) {
+                            errorDetails = '连接意图识别服务被拒绝。请检查:<br>' +
+                                '1. 意图识别服务是否已启动<br>' +
+                                '2. 端口8081是否被正确监听<br>' +
+                                '3. 是否有防火墙阻止连接<br>' +
+                                '查看错误详情: ' + error;
+                        }
+                        
+                        $('#chatContainer').append(
+                            `<div class="system-message alert-danger p-3">意图分析错误: ${errorDetails}</div>`
+                        );
+                        $('#resultContainer').html(
+                            `<div class="alert alert-danger">
+                                <h5>请求失败</h5>
+                                <p>${errorDetails}</p>
+                                <p><strong>故障排除建议:</strong></p>
+                                <ol>
+                                    <li>确认intent-service (端口8081)已启动</li>
+                                    <li>检查TestIntentController.java中的服务地址设置</li>
+                                    <li>查看intent-service的日志是否有错误</li>
+                                </ol>
+                            </div>`
+                        );
+                        $('#chatContainer').scrollTop($('#chatContainer')[0].scrollHeight);
+                    }
+                });
+            }
+            
+            function displayResult(response, userInput) {
+                let resultHtml = '';
+                
+                // 解析链视图
+                if (response.firstResult && response.firstResult.confidence > 0) {
+                    resultHtml += `
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <span class="parse-step">意图解析链</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="event-chain">
+                                <div class="d-flex align-items-center flex-wrap">
+                    `;
+                    
+                    // 第一次解析
+                    if (response.firstResult) {
+                        const libraryBadgeClass = response.firstResult.libraryType === 'PERSONAL' ? 
+                            'personal-event' : (response.firstResult.libraryType === 'BANK' ? 'bank-event' : 'standard-event');
+                        
+                        resultHtml += `
+                            <div class="text-center">
+                                <div class="event-badge ${libraryBadgeClass}">${response.firstResult.libraryType}</div>
+                                <div><strong>${response.firstResult.intentName}</strong></div>
+                                <div class="small">${response.firstResult.description || ''}</div>
+                            </div>
+                        `;
+                    }
+                    
+                    // 添加箭头和第二次解析
+                    if (response.secondResult) {
+                        resultHtml += `
+                            <div class="chain-arrow">→</div>
+                            <div class="text-center">
+                                <div class="event-badge bank-event">${response.secondResult.libraryType}</div>
+                                <div><strong>${response.secondResult.intentName}</strong></div>
+                                <div class="small">${response.secondResult.description || ''}</div>
+                            </div>
+                        `;
+                    }
+                    
+                    // 添加箭头和第三次解析
+                    if (response.thirdResult) {
+                        resultHtml += `
+                            <div class="chain-arrow">→</div>
+                            <div class="text-center">
+                                <div class="event-badge standard-event">${response.thirdResult.libraryType}</div>
+                                <div><strong>${response.thirdResult.intentName}</strong></div>
+                            </div>
+                        `;
+                        
+                        // 展示关联的标准事件
+                        if (response.thirdResult.relatedEvents && response.thirdResult.relatedEvents.length > 0) {
+                            resultHtml += `
+                                <div class="chain-arrow">→</div>
+                                <div>
+                                    <div><strong>标准事件:</strong></div>
+                                    <div>
+                            `;
+                            
+                            response.thirdResult.relatedEvents.forEach(event => {
+                                resultHtml += `<div class="event-badge standard-event">${event}</div>`;
+                            });
+                            
+                            resultHtml += `
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    }
+                    
+                    resultHtml += `
+                                </div>
+                            </div>
+                    `;
+                    
+                    // 添加参数和执行信息
+                    if (response.thirdResult && response.thirdResult.parameters) {
+                        const params = response.thirdResult.parameters;
+                        resultHtml += `
+                            <div class="mt-3">
+                                <h5>执行信息</h5>
+                                <table class="table table-sm table-bordered param-table">
+                                    <thead>
+                                        <tr>
+                                            <th>参数名</th>
+                                            <th>参数值</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                        `;
+                        
+                        // 遍历所有参数
+                        Object.keys(params).forEach(key => {
+                            let paramValue = params[key];
+                            if (Array.isArray(paramValue)) {
+                                paramValue = paramValue.join(', ');
+                            } else if (typeof paramValue === 'boolean') {
+                                paramValue = paramValue ? '开启/true' : '关闭/false';
+                            } else if (typeof paramValue === 'object') {
+                                paramValue = JSON.stringify(paramValue);
+                            }
+                            
+                            resultHtml += `
+                                <tr>
+                                    <td>${key}</td>
+                                    <td>${paramValue}</td>
+                                </tr>
+                            `;
+                        });
+                        
+                        resultHtml += `
+                                    </tbody>
+                                </table>
+                                <div class="mt-2">
+                                    <strong>调用次数:</strong> ${response.thirdResult.callCount || 1}
+                                </div>
+                                <div class="mt-2">
+                                    <strong>置信度:</strong> ${response.thirdResult.confidence || 0}%
+                                </div>
+                            </div>
+                        `;
+                    }
+                    
+                    resultHtml += `
+                        </div>
+                    </div>
+                    `;
+                }
+                
+                // 第一次解析结果
+                if (response.firstResult) {
+                    resultHtml += createResultCard(
+                        response.firstResult,
+                        1,
+                        null  // 第一次解析没有前置结果
+                    );
+                }
+                
+                // 第二次解析结果
+                if (response.secondResult) {
+                    resultHtml += createResultCard(
+                        response.secondResult,
+                        2,
+                        response.firstResult  // 使用第一次解析的结果作为参数来源
+                    );
+                }
+                
+                // 第三次解析结果
+                if (response.thirdResult) {
+                    resultHtml += createResultCard(
+                        response.thirdResult,
+                        3,
+                        response.secondResult  // 使用第二次解析的结果作为参数来源
+                    );
+                }
+                
+                if (resultHtml === '') {
+                    resultHtml = '<div class="alert alert-warning">未获得任何解析结果</div>';
+                }
+                
+                $('#resultContainer').html(resultHtml);
+            }
+            
+            function createResultCard(result, parseStep, previousResult) {
+                let intentName = result.intentName;
+                let badgeClass = 'badge-primary';  // 默认样式
+                
+                // 根据解析步骤设置不同的样式
+                switch(parseStep) {
+                    case 1:
+                        badgeClass = 'badge-info';  // 个人事件样式
+                        break;
+                    case 2:
+                        badgeClass = 'badge-warning';  // 银行事件样式
+                        break;
+                    case 3:
+                        badgeClass = 'badge-success';  // 标准事件样式
+                        // 第三次解析时，优先使用标准事件名称
+                        if (result.relatedEvents && result.relatedEvents.length > 0) {
+                            intentName = result.relatedEvents[0];  // 使用第一个关联的标准事件名称
+                        }
+                        break;
+                }
+
+                let html = `
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <span class="badge ${badgeClass}">${intentName}</span>
+                            <small class="text-muted ml-2">置信度: ${(result.confidence * 100).toFixed(2)}%</small>
+                        </h5>`;
+
+                // 显示关联事件（如果有）
+                if (result.relatedEvents && result.relatedEvents.length > 0) {
+                    html += `
+                    <div class="related-events mb-3">
+                        <h6>关联事件:</h6>
+                        <div>`;
+                    result.relatedEvents.forEach(event => {
+                        html += `<span class="badge badge-secondary mr-2">${event}</span>`;
+                    });
+                    html += `</div></div>`;
+                }
+
+                // 显示参数表格
+                html += createParameterTable(result.parameters, previousResult ? previousResult.parameters : null);
+                
+                html += `</div></div>`;
+                return html;
+            }
+            
+            // 创建参数表格的辅助函数
+            function createParameterTable(parameters, previousParameters) {
+                if (!parameters && !previousParameters) {
+                    return '<p>无参数</p>';
+                }
+                
+                // 合并前一次解析的参数
+                const mergedParameters = { ...(previousParameters || {}), ...(parameters || {}) };
+                
+                let html = `
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>参数名</th>
+                            <th>参数值</th>
+                            <th>参数类型</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+                
+                for (const [key, value] of Object.entries(mergedParameters)) {
+                    const type = Array.isArray(value) ? 'Array' : 
+                                 typeof value === 'boolean' ? 'Boolean' :
+                                 typeof value === 'object' && value !== null ? 'Object' : 'String';
+                    
+                    html += `
+                    <tr>
+                        <td>${key}</td>
+                        <td>${formatParameterValue(value)}</td>
+                        <td>${type}</td>
+                    </tr>`;
+                }
+                
+                html += '</tbody></table>';
+                return html;
+            }
+            
+            function formatParameterValue(value) {
+                if (Array.isArray(value)) {
+                    return value.join(', ');
+                } else if (typeof value === 'boolean') {
+                    return value ? '开启/true' : '关闭/false';
+                } else if (typeof value === 'object' && value !== null) {
+                    return JSON.stringify(value);
+                } else {
+                    return value;
+                }
+            }
+        });
+    </script>
+</body>
+</html> 
