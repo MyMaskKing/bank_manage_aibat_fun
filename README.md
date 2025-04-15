@@ -6,7 +6,9 @@
 
 - [系统设计文档](DESGIN.md) - 详细的系统设计说明
 - [构建与启动指南](BUILD.md) - 构建和部署说明
-- [对话记录](docs/conversations) - 用户交互记录
+- [对话记录](测试的对话记录.md) - 用户交互记录
+- 画面展示
+- ![image](https://github.com/user-attachments/assets/cab32703-e7d4-4ea4-a300-7c8ebbb2a7e4)
 
 ## 系统架构
 
